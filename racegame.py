@@ -6,7 +6,7 @@ import math
 import random
 
 # --- GLOBAL STATE ---
-TRACK_WIDTH = 5.0
+TRACK_WIDTH = 10.0
 CONTROL_POINTS = []
 SPLINE_POINTS = []
 objects = []  # obstacles & boosts
@@ -363,7 +363,7 @@ def keyboard_down(k, x, y):
     global camera_mode, game_finished, position, velocity, objects, weather
     if k == b'c' or k == b'C':
         camera_mode = (camera_mode + 1) % 2
-    elif k == b'w' or k == b'W':
+    elif k == b'z' or k == b'Z':
         set_weather((weather + 1) % 3)
     elif (k == b'r' or k == b'R') and game_finished:
         game_finished = False
