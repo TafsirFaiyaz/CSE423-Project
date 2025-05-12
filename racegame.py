@@ -63,7 +63,7 @@ def catmull_rom(p0, p1, p2, p3, t):
 
 def generate_track():
     SPLINE_POINTS.clear()
-    samples = 300
+    samples = 600
     for i in range(samples):
         t = i / float(samples)
         x = 0.0
@@ -130,14 +130,35 @@ def draw_cube():
     glEnd()
 
 
-def draw_car(player_id):
+def draw_car():
+    # Car Body
+    glColor3f(0.8, 0.1, 0.1)  # Red body
     glPushMatrix()
-    glTranslatef(*position[player_id])
-    glRotatef(-math.degrees(orientation[player_id]), 0, 1, 0)
-    glScalef(0.2, 0.2, 0.2)
-    glColor3f(*car_colors[player_id])
-    draw_cube()
+    glScalef(1.2, 0.3, 0.6)  # Narrower and flatter
+    glutSolidCube(1.0)
     glPopMatrix()
+
+    # Car Top
+    glColor3f(0.9, 0.9, 0.9)  # Light gray top
+    glPushMatrix()
+    glTranslatef(0.0, 0.35, 0.0)
+    glScalef(0.6, 0.25, 0.4)
+    glutSolidCube(1.0)
+    glPopMatrix()
+
+    # Wheels (smaller and better positioned)
+    glColor3f(0.0, 0.0, 0.0)
+    wheel_radius = 0.1
+    wheel_width = 0.2
+    wheel_offset_x = 0.5
+    wheel_offset_z = 0.3
+    for x in [-wheel_offset_x, wheel_offset_x]:
+        for z in [-wheel_offset_z, wheel_offset_z]:
+            glPushMatrix()
+            glTranslatef(x, -0.15, z)
+            glRotatef(90, 0, 1, 0)
+            glutSolidTorus(wheel_radius / 2, wheel_radius, 10, 10)
+            glPopMatrix()
 
 
 def draw_objects():
@@ -180,8 +201,20 @@ def draw_particles():
 def draw_sun():
     glPushMatrix()
     glTranslatef(0, 15, 150)  # Moved to end of track
-    glColor3f(1.0, 1.0, 0.0)  # Yellow sun
-    glutSolidSphere(4.0, 20, 20)  # Slightly smaller for distance
+    glColor3f(1.0, 1.0, 0.0)  # Yellow
+
+    # Draw sun core
+    glutSolidSphere(2.0, 20, 20)
+
+    # Draw sun rays
+    glBegin(GL_LINES)
+    for i in range(12):
+        angle = math.radians(i * 30)
+        x = math.cos(angle) * 4.0
+        y = math.sin(angle) * 4.0
+        glVertex3f(0, 0, 0)
+        glVertex3f(x, y, 0)
+    glEnd()
     glPopMatrix()
 
 
@@ -434,8 +467,15 @@ def draw_player_view(player_id, width, height):
     draw_objects()
 
     # Draw both cars
-    draw_car(0)
-    draw_car(1)
+    for i in range(2):
+        glPushMatrix()
+        glTranslatef(*position[i])
+        glColor3f(*car_colors[i])
+        draw_car()
+        glPopMatrix()
+
+    # draw_car()
+    # draw_car()
 
     if current_level == 0:  # Sunny
         draw_sun()
