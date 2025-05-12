@@ -12,7 +12,7 @@ SPLINE_POINTS = []
 objects = []  # obstacles & boosts
 particles = []  # weather particles
 game_finished = [False, False]  # Track finish state for both players
-weather = 0  # 0: sunny, 1: rain, 2: snow
+current_level = 0  # 0: sunny, 1: rain, 2: snow
 
 # Car state for two players
 position = [
@@ -41,6 +41,10 @@ track_tex = None
 
 # Camera state for both players
 camera_mode = [1, 1]  # 0 = first-person, 1 = third-person
+
+# Level progression state
+level_completed = False
+level_complete_time = 0
 
 # --- TRACK GENERATION ---
 def generate_control_points(n=2, length=150):
@@ -167,7 +171,7 @@ def draw_particles():
     glEnable(GL_BLEND)
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
     glDisable(GL_LIGHTING)
-    if weather == 1:  # Rain
+    if current_level == 1:  # Rain
         glColor4f(0.5, 0.5, 1.0, 0.7)  # Semi-transparent blue
         glBegin(GL_LINES)
         for p in particles:
@@ -175,7 +179,7 @@ def draw_particles():
             glVertex3f(x, y, z)
             glVertex3f(x, y - 1.0, z)
         glEnd()
-    elif weather == 2:  # Snow
+    elif current_level == 2:  # Snow
         glColor4f(1.0, 1.0, 1.0, 0.9)  # Semi-transparent white
         glPointSize(3.0)
         glBegin(GL_POINTS)
@@ -238,7 +242,7 @@ def check_collisions(player_id):
         boost_end_time[player_id] = 0
 
 def update_physics():
-    global position, velocity, game_finished
+    global position, velocity, game_finished, level_completed, level_complete_time, current_level
     
     # Check for car-to-car collisions
     check_car_collision()
@@ -278,6 +282,19 @@ def update_physics():
         if position[player_id][2] >= 150.0:
             game_finished[player_id] = True
 
+    # Check if level is complete (both players finished)
+    if all(game_finished) and not level_completed:
+        level_completed = True
+        level_complete_time = glutGet(GLUT_ELAPSED_TIME)
+
+    # Auto-advance to next level after 3 seconds
+    if level_completed and glutGet(GLUT_ELAPSED_TIME) > level_complete_time + 3000:
+        if current_level < 2:  # Only advance if not on final level
+            next_level()
+        else:
+            # On final level, restart the game from level 0
+            restart_game()
+
     # Update particles
     for p in particles:
         p['pos'][0] += p['vel'][0]
@@ -289,9 +306,9 @@ def update_physics():
         
         if p['pos'][1] < -1:  # Fall below screen
             p['pos'] = [random.uniform(-5, 5), 20, random.uniform(max(0, avg_z - 20), min(150, avg_z + 20))]
-            if weather == 1:  # Rain
+            if current_level == 1:  # Rain
                 p['vel'] = [0, random.uniform(-2.5, -1.5), 0]  # Random speed
-            elif weather == 2:  # Snow
+            elif current_level == 2:  # Snow
                 p['vel'] = [random.uniform(-0.02, 0.02), random.uniform(-0.7, -0.3), random.uniform(-0.02, 0.02)]  # Random speed
 
 def check_car_collision():
@@ -314,6 +331,53 @@ def check_car_collision():
         position[0][0] += push_dir
         position[1][0] -= push_dir
 
+# --- LEVEL MANAGEMENT ---
+def set_level_properties(level):
+    global handling, particles
+    if level == 0:  # Sunny
+        handling = 0.06
+        particles = []
+    elif level == 1:  # Rain
+        handling = 0.03
+        particles = [{'pos': [random.uniform(-10, 10), 20, random.uniform(-10, 10)],
+                      'vel': [0, random.uniform(-1.0, -0.5), 0]} for _ in range(150)]  # Slower rain, 150 particles
+    elif level == 2:  # Snow
+        handling = 0.12
+        particles = [{'pos': [random.uniform(-10, 10), 20, random.uniform(-10, 10)],
+                      'vel': [random.uniform(-0.05, 0.05), random.uniform(-0.3, -0.1), random.uniform(-0.05, 0.05)]} for
+                     _ in range(300)]  # Slower snow, 300 particles
+
+def next_level():
+    global current_level, game_finished, position, velocity, max_speed, boost_end_time, level_completed
+    
+    # Advance to next level
+    current_level += 1
+    
+    # Reset race state
+    game_finished = [False, False]
+    position = [
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0]
+    ]
+    velocity = [0.0, 0.0]
+    max_speed = [top_speed, top_speed]
+    boost_end_time = [0, 0]
+    level_completed = False
+    
+    # Set up new level properties
+    set_level_properties(current_level)
+    
+    # Generate new objects
+    generate_objects()
+    
+    # Set starting positions
+    init_players()
+
+def restart_game():
+    global current_level
+    current_level = -1  # Reset to first level (0)
+    next_level()
+
 # --- SPLIT SCREEN RENDERING ---
 def setup_viewport(player_id, width, height):
     if player_id == 0:  # Left half for player 1
@@ -324,13 +388,13 @@ def setup_viewport(player_id, width, height):
 def draw_player_view(player_id, width, height):
     setup_viewport(player_id, width, height)
     
-    # Set background color based on weather
-    if weather == 0:  # Sunny
+    # Set background color based on current level
+    if current_level == 0:  # Sunny
         glClearColor(0.5, 0.7, 1.0, 1.0)  # Light blue sky
-    elif weather == 1:  # Rainy
+    elif current_level == 1:  # Rainy
         glClearColor(0.3, 0.3, 0.3, 1.0)  # Dark gray for clouds
-    elif weather == 2:  # Snowy
-        glClearColor(0, 0, 0.7, 1.0)  # Light gray for snowy clouds
+    elif current_level == 2:  # Snowy
+        glClearColor(0.6, 0.6, 0.7, 1.0)  # Light gray for snowy clouds
 
     # Only clear the portion of the screen for this player
     if player_id == 0:  # First player - clear both buffers
@@ -379,7 +443,7 @@ def draw_player_view(player_id, width, height):
     draw_car(0)
     draw_car(1)
 
-    if weather == 0:  # Sunny
+    if current_level == 0:  # Sunny
         draw_sun()
 
     # Draw player-specific UI elements
@@ -408,6 +472,13 @@ def draw_player_view(player_id, width, height):
     speed_text = f"Speed: {int(velocity[player_id] * 1000)}"
     glRasterPos2f(x_pos, y_pos - 20)
     for char in speed_text:
+        glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(char))
+    
+    # Draw level indicator
+    level_names = ["Sunny", "Rainy", "Snowy"]
+    level_text = f"Level: {current_level + 1} ({level_names[current_level]})"
+    glRasterPos2f(x_pos, y_pos - 40)
+    for char in level_text:
         glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(char))
     
     # Draw finish message if player has finished
@@ -444,15 +515,18 @@ def draw_player_view(player_id, width, height):
         glVertex2f(width // 2, height)
         glEnd()
         
-        # If all players finished, show restart message
+        # If all players finished, show level progression message
         if all(game_finished):
             glColor3f(1, 1, 1)
-            restart_text = "Press R to Restart"
-            text_width = len(restart_text) * 9  # Approximate width
+            if current_level < 2:
+                progression_text = "Next Level in 3 seconds..."
+            else:
+                progression_text = "Game Complete! Restarting in 3 seconds..."
+            text_width = len(progression_text) * 9  # Approximate width
             x_pos = width // 2 - text_width // 2
             y_pos = height // 2
             glRasterPos2f(x_pos, y_pos)
-            for char in restart_text:
+            for char in progression_text:
                 glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(char))
         
         glPopMatrix()
@@ -492,24 +566,8 @@ def special_up(k, x, y):
     elif k == GLUT_KEY_LEFT: keys['p1_left'] = False
     elif k == GLUT_KEY_RIGHT: keys['p1_right'] = False
 
-def set_weather(new_weather):
-    global weather, handling, particles
-    weather = new_weather
-    if weather == 0:  # Sunny
-        handling = 0.06
-        particles = []
-    elif weather == 1:  # Rain
-        handling = 0.03
-        particles = [{'pos': [random.uniform(-10, 10), 20, random.uniform(-10, 10)],
-                      'vel': [0, random.uniform(-1.0, -0.5), 0]} for _ in range(150)]  # Slower rain, 150 particles
-    elif weather == 2:  # Snow
-        handling = 0.12
-        particles = [{'pos': [random.uniform(-10, 10), 20, random.uniform(-10, 10)],
-                      'vel': [random.uniform(-0.05, 0.05), random.uniform(-0.3, -0.1), random.uniform(-0.05, 0.05)]} for
-                     _ in range(300)]  # Slower snow, 300 particles
-
 def keyboard_down(k, x, y):
-    global camera_mode, game_finished, position, velocity, objects, weather
+    global camera_mode
     
     # Player 1 camera toggle
     if k == b'c' or k == b'C':
@@ -519,10 +577,6 @@ def keyboard_down(k, x, y):
     elif k == b'v' or k == b'V':
         camera_mode[1] = (camera_mode[1] + 1) % 2
     
-    # Weather toggle
-    elif k == b'z' or k == b'Z':
-        set_weather((weather + 1) % 3)
-    
     # Player 2 controls (WASD)
     elif k == b'w' or k == b'W':
         keys['p2_accel'] = True
@@ -530,18 +584,6 @@ def keyboard_down(k, x, y):
         keys['p2_left'] = True
     elif k == b'd' or k == b'D':
         keys['p2_right'] = True
-    
-    # Restart game when all players finished
-    elif (k == b'r' or k == b'R') and all(game_finished):
-        game_finished = [False, False]
-        position = [
-            [0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0]
-        ]
-        velocity = [0.0, 0.0]
-        max_speed = [top_speed, top_speed]
-        boost_end_time = [0, 0]
-        generate_objects()
 
 def keyboard_up(k, x, y):
     # Player 2 controls (WASD) release
@@ -581,7 +623,7 @@ def init_players():
 glutInit()
 glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH)
 glutInitWindowSize(1500,900)
-glutCreateWindow(b"3D Car Simulation - Two Player Split Screen")
+glutCreateWindow(b"3D Car Simulation - Three Levels")
 
 init()
 generate_control_points()
@@ -589,8 +631,8 @@ generate_track()
 generate_objects()
 init_players()
 
-# Set random weather at startup
-set_weather(random.randint(0, 2))
+# Start with sunny level
+set_level_properties(current_level)
 
 glutDisplayFunc(display)
 glutReshapeFunc(reshape)
