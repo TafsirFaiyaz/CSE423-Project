@@ -6,33 +6,45 @@ import math
 import random
 
 # --- GLOBAL STATE ---
-TRACK_WIDTH = 5.0
+TRACK_WIDTH = 10.0
 CONTROL_POINTS = []
 SPLINE_POINTS = []
 objects = []  # obstacles & boosts
 particles = []  # weather particles
-game_finished = False
-weather = 0  # 0: sunny, 1: rain, 2: snow
+game_finished = [False, False]  # Track finish state for both players
+current_level = 0  # 0: sunny, 1: rain, 2: snow
 
-# Car state
-position    = [0.0, 0.0, 0.0]
-orientation = 0.0  # Fixed at 0 for straight movement
-velocity    = 0.0
-top_speed   = 0.15
+# Car state for two players
+position = [
+    [0.0, 0.0, 0.0],       # Player 1 (left side of track)
+    [0.0, 0.0, 0.0]        # Player 2 (right side of track)
+]
+orientation = [0.0, 0.0]   # Fixed at 0 for straight movement
+velocity = [0.0, 0.0]
+top_speed = 0.15
 acceleration = 0.005
-handling    = 0.06
+handling = 0.06
 BOOSTED_TOP_SPEED = top_speed * 2.0
-max_speed   = top_speed
-boost_end_time = 0
+max_speed = [top_speed, top_speed]
+boost_end_time = [0, 0]
+car_colors = [(1, 0, 0), (0, 0, 1)]  # Red for P1, Blue for P2
 
-# Input keys
-keys = {'accel': False, 'left': False, 'right': False, 'restart': False}
+# Input keys for both players
+keys = {
+    'p1_accel': False, 'p1_left': False, 'p1_right': False,
+    'p2_accel': False, 'p2_left': False, 'p2_right': False,
+    'restart': False
+}
 
 # Texture handle
 track_tex = None
 
-# Camera state
-camera_mode = 1  # 0 = first-person, 1 = third-person
+# Camera state for both players
+camera_mode = [1, 1]  # 0 = first-person, 1 = third-person
+
+# Level progression state
+level_completed = False
+level_complete_time = 0
 
 # --- TRACK GENERATION ---
 def generate_control_points(n=2, length=150):
@@ -59,7 +71,6 @@ def generate_track():
 
 # --- OBJECT PLACEMENT ---
 def generate_objects():
-
     num_obs = int(len(SPLINE_POINTS) / 10)  # 1 obstacle every 10 segments
     num_boost = int(len(SPLINE_POINTS) / 50)  # 1 boost every 50 segments
 
@@ -131,12 +142,12 @@ def draw_cube():
     glVertex3f(1,1,1);   glVertex3f(1,1,-1)
     glEnd()
 
-def draw_car():
+def draw_car(player_id):
     glPushMatrix()
-    glTranslatef(*position)
-    glRotatef(-math.degrees(orientation), 0,1,0)
+    glTranslatef(*position[player_id])
+    glRotatef(-math.degrees(orientation[player_id]), 0,1,0)
     glScalef(0.2, 0.2, 0.2)
-    glColor3f(1,0,0)
+    glColor3f(*car_colors[player_id])
     draw_cube()
     glPopMatrix()
 
@@ -160,7 +171,7 @@ def draw_particles():
     glEnable(GL_BLEND)
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
     glDisable(GL_LIGHTING)
-    if weather == 1:  # Rain
+    if current_level == 1:  # Rain
         glColor4f(0.5, 0.5, 1.0, 0.7)  # Semi-transparent blue
         glBegin(GL_LINES)
         for p in particles:
@@ -168,7 +179,7 @@ def draw_particles():
             glVertex3f(x, y, z)
             glVertex3f(x, y - 1.0, z)
         glEnd()
-    elif weather == 2:  # Snow
+    elif current_level == 2:  # Snow
         glColor4f(1.0, 1.0, 1.0, 0.9)  # Semi-transparent white
         glPointSize(3.0)
         glBegin(GL_POINTS)
@@ -207,9 +218,9 @@ def draw_text(x, y, text):
 def aabb_collide(min1, max1, min2, max2):
     return all(min1[i] < max2[i] and max1[i] > min2[i] for i in range(3))
 
-def check_collisions():
+def check_collisions(player_id):
     global velocity, max_speed, boost_end_time
-    cx,cy,cz = position
+    cx,cy,cz = position[player_id]
     car_min = (cx-0.1, cy-0.1, cz-0.1)
     car_max = (cx+0.1, cy+0.1, cz+0.1)
     t = glutGet(GLUT_ELAPSED_TIME)
@@ -221,73 +232,183 @@ def check_collisions():
         o_max = (x+0.125, y+0.125, z+0.125)
         if aabb_collide(car_min, car_max, o_min, o_max):
             if obj['type'] == 'obs':
-                velocity = 0.0
+                velocity[player_id] = 0.0
             else:
-                max_speed = BOOSTED_TOP_SPEED
-                boost_end_time = t + 2000
+                max_speed[player_id] = BOOSTED_TOP_SPEED
+                boost_end_time[player_id] = t + 2000
             obj['active'] = False
-    if boost_end_time and t > boost_end_time:
-        max_speed = top_speed
-        boost_end_time = 0
+    if boost_end_time[player_id] and t > boost_end_time[player_id]:
+        max_speed[player_id] = top_speed
+        boost_end_time[player_id] = 0
 
 def update_physics():
-    global position, velocity, game_finished
-    if game_finished:
-        return
+    global position, velocity, game_finished, level_completed, level_complete_time, current_level
+    
+    # Check for car-to-car collisions
+    check_car_collision()
+    
+    # Update both players
+    for player_id in range(2):
+        if game_finished[player_id]:
+            continue
 
-    check_collisions()
-    if keys['accel']:
-        velocity += acceleration
-    else:
-        velocity -= acceleration / 2 if velocity > 0 else 0
-    velocity = max(0, min(max_speed, velocity))
+        check_collisions(player_id)
+        
+        # Apply key controls for respective player
+        accel_key = 'p1_accel' if player_id == 0 else 'p2_accel'
+        left_key = 'p1_left' if player_id == 0 else 'p2_left'
+        right_key = 'p1_right' if player_id == 0 else 'p2_right'
+        
+        if keys[accel_key]:
+            velocity[player_id] += acceleration
+        else:
+            velocity[player_id] -= acceleration / 2 if velocity[player_id] > 0 else 0
+        velocity[player_id] = max(0, min(max_speed[player_id], velocity[player_id]))
 
-    if keys['left']:
-        position[0] += handling  # Move right (positive x)
-    if keys['right']:
-        position[0] -= handling  # Move left (negative x)
+        if keys[left_key]:
+            position[player_id][0] += handling  # Move right (positive x)
+        if keys[right_key]:
+            position[player_id][0] -= handling  # Move left (negative x)
 
-    # Constrain to track with slowdown on boundary hit
-    new_x = max(-TRACK_WIDTH/2 + 0.1, min(TRACK_WIDTH/2 - 0.1, position[0]))
-    if new_x != position[0]:  # Hit boundary
-        velocity *= 0.9  # Reduce velocity by 10%
-    position[0] = new_x
+        # Constrain to track with slowdown on boundary hit
+        new_x = max(-TRACK_WIDTH/2 + 0.1, min(TRACK_WIDTH/2 - 0.1, position[player_id][0]))
+        if new_x != position[player_id][0]:  # Hit boundary
+            velocity[player_id] *= 0.9  # Reduce velocity by 10%
+        position[player_id][0] = new_x
 
-    position[2] += velocity
+        position[player_id][2] += velocity[player_id]
+
+        # Check if player has finished the race
+        if position[player_id][2] >= 150.0:
+            game_finished[player_id] = True
+
+    # Check if level is complete (both players finished)
+    if all(game_finished) and not level_completed:
+        level_completed = True
+        level_complete_time = glutGet(GLUT_ELAPSED_TIME)
+
+    # Auto-advance to next level after 3 seconds
+    if level_completed and glutGet(GLUT_ELAPSED_TIME) > level_complete_time + 3000:
+        if current_level < 2:  # Only advance if not on final level
+            next_level()
+        else:
+            # On final level, restart the game from level 0
+            restart_game()
 
     # Update particles
     for p in particles:
         p['pos'][0] += p['vel'][0]
         p['pos'][1] += p['vel'][1]
         p['pos'][2] += p['vel'][2]
+        
+        # Get average z position of both cars for particle respawn
+        avg_z = (position[0][2] + position[1][2]) / 2
+        
         if p['pos'][1] < -1:  # Fall below screen
-            p['pos'] = [random.uniform(-5, 5), 20, random.uniform(max(0, position[2] - 20), min(150, position[2] + 20))]
-            if weather == 1:  # Rain
+            p['pos'] = [random.uniform(-5, 5), 20, random.uniform(max(0, avg_z - 20), min(150, avg_z + 20))]
+            if current_level == 1:  # Rain
                 p['vel'] = [0, random.uniform(-2.5, -1.5), 0]  # Random speed
-            elif weather == 2:  # Snow
+            elif current_level == 2:  # Snow
                 p['vel'] = [random.uniform(-0.02, 0.02), random.uniform(-0.7, -0.3), random.uniform(-0.02, 0.02)]  # Random speed
 
-    if position[2] >= 150.0:
-        game_finished = True
+def check_car_collision():
+    # Simple collision detection between two cars
+    p1_x, p1_y, p1_z = position[0]
+    p2_x, p2_y, p2_z = position[1]
+    
+    # Distance check (rough collision)
+    dx = p1_x - p2_x
+    dz = p1_z - p2_z
+    dist_squared = dx*dx + dz*dz
+    
+    if dist_squared < 0.04:  # Cars are too close (colliding)
+        # Slow down both cars
+        velocity[0] *= 0.5
+        velocity[1] *= 0.5
+        
+        # Push cars apart slightly
+        push_dir = 0.05 if dx < 0 else -0.05
+        position[0][0] += push_dir
+        position[1][0] -= push_dir
 
-# --- GLUT CALLBACKS ---
-def display():
-    # Set background color based on weather
-    if weather == 0:  # Sunny
+# --- LEVEL MANAGEMENT ---
+def set_level_properties(level):
+    global handling, particles
+    if level == 0:  # Sunny
+        handling = 0.06
+        particles = []
+    elif level == 1:  # Rain
+        handling = 0.03
+        particles = [{'pos': [random.uniform(-10, 10), 20, random.uniform(-10, 10)],
+                      'vel': [0, random.uniform(-1.0, -0.5), 0]} for _ in range(150)]  # Slower rain, 150 particles
+    elif level == 2:  # Snow
+        handling = 0.12
+        particles = [{'pos': [random.uniform(-10, 10), 20, random.uniform(-10, 10)],
+                      'vel': [random.uniform(-0.05, 0.05), random.uniform(-0.3, -0.1), random.uniform(-0.05, 0.05)]} for
+                     _ in range(300)]  # Slower snow, 300 particles
+
+def next_level():
+    global current_level, game_finished, position, velocity, max_speed, boost_end_time, level_completed
+    
+    # Advance to next level
+    current_level += 1
+    
+    # Reset race state
+    game_finished = [False, False]
+    position = [
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0]
+    ]
+    velocity = [0.0, 0.0]
+    max_speed = [top_speed, top_speed]
+    boost_end_time = [0, 0]
+    level_completed = False
+    
+    # Set up new level properties
+    set_level_properties(current_level)
+    
+    # Generate new objects
+    generate_objects()
+    
+    # Set starting positions
+    init_players()
+
+def restart_game():
+    global current_level
+    current_level = -1  # Reset to first level (0)
+    next_level()
+
+# --- SPLIT SCREEN RENDERING ---
+def setup_viewport(player_id, width, height):
+    if player_id == 0:  # Left half for player 1
+        glViewport(0, 0, width // 2, height)
+    else:  # Right half for player 2
+        glViewport(width // 2, 0, width // 2, height)
+
+def draw_player_view(player_id, width, height):
+    setup_viewport(player_id, width, height)
+    
+    # Set background color based on current level
+    if current_level == 0:  # Sunny
         glClearColor(0.5, 0.7, 1.0, 1.0)  # Light blue sky
-    elif weather == 1:  # Rainy
+    elif current_level == 1:  # Rainy
         glClearColor(0.3, 0.3, 0.3, 1.0)  # Dark gray for clouds
-    elif weather == 2:  # Snowy
-        glClearColor(0, 0, 0.7, 1.0)  # Light gray for snowy clouds
+    elif current_level == 2:  # Snowy
+        glClearColor(0.6, 0.6, 0.7, 1.0)  # Light gray for snowy clouds
 
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+    # Only clear the portion of the screen for this player
+    if player_id == 0:  # First player - clear both buffers
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+    else:  # Second player - only clear depth buffer to preserve first player's rendering
+        glClear(GL_DEPTH_BUFFER_BIT)
+    
     glLoadIdentity()
 
-    px, py, pz = position
-    cos_o = math.cos(orientation)
-    sin_o = math.sin(orientation)
+    px, py, pz = position[player_id]
+    cos_o = math.cos(orientation[player_id])
+    sin_o = math.sin(orientation[player_id])
 
-    if camera_mode == 0:  # First-person view
+    if camera_mode[player_id] == 0:  # First-person view
         eye_x = px + 0.3 * sin_o
         eye_y = py + 0.1
         eye_z = pz + 0.3 * cos_o
@@ -317,61 +438,161 @@ def display():
     draw_track()
     draw_particles()
     draw_objects()
-    draw_car()
+    
+    # Draw both cars
+    draw_car(0)
+    draw_car(1)
 
-    if weather == 0:  # Sunny
+    if current_level == 0:  # Sunny
         draw_sun()
 
-    if game_finished:
-        glColor3f(1, 1, 1)
-        draw_text(300, 300, "Press R to Restart")
+    # Draw player-specific UI elements
+    viewport_width = width // 2
+    viewport_height = height
+    
+    # Setup for 2D overlay
+    glMatrixMode(GL_PROJECTION)
+    glPushMatrix()
+    glLoadIdentity()
+    glOrtho(0, viewport_width, 0, viewport_height, -1, 1)
+    glMatrixMode(GL_MODELVIEW)
+    glPushMatrix()
+    glLoadIdentity()
+    
+    # Draw player label
+    glColor3f(*car_colors[player_id])
+    player_text = f"Player {player_id+1}"
+    x_pos = 10
+    y_pos = viewport_height - 20
+    glRasterPos2f(x_pos, y_pos)
+    for char in player_text:
+        glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(char))
+    
+    # Draw speed indicator
+    speed_text = f"Speed: {int(velocity[player_id] * 1000)}"
+    glRasterPos2f(x_pos, y_pos - 20)
+    for char in speed_text:
+        glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(char))
+    
+    # Draw level indicator
+    level_names = ["Sunny", "Rainy", "Snowy"]
+    level_text = f"Level: {current_level + 1} ({level_names[current_level]})"
+    glRasterPos2f(x_pos, y_pos - 40)
+    for char in level_text:
+        glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(char))
+    
+    # Draw finish message if player has finished
+    if game_finished[player_id]:
+        finish_text = "FINISHED!"
+        glColor3f(1, 1, 0)  # Yellow
+        x_pos = viewport_width // 2 - 50
+        y_pos = viewport_height // 2
+        glRasterPos2f(x_pos, y_pos)
+        for char in finish_text:
+            glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(char))
+    
+    # Reset projection
+    glPopMatrix()
+    glMatrixMode(GL_PROJECTION)
+    glPopMatrix()
+    glMatrixMode(GL_MODELVIEW)
 
+    # Draw divider line between viewports
+    if player_id == 1:  # Only draw after second viewport is rendered
+        glViewport(0, 0, width, height)  # Full screen for divider
+        glMatrixMode(GL_PROJECTION)
+        glPushMatrix()
+        glLoadIdentity()
+        glOrtho(0, width, 0, height, -1, 1)
+        glMatrixMode(GL_MODELVIEW)
+        glPushMatrix()
+        glLoadIdentity()
+        
+        # Draw vertical divider
+        glColor3f(1, 1, 1)  # White divider
+        glBegin(GL_LINES)
+        glVertex2f(width // 2, 0)
+        glVertex2f(width // 2, height)
+        glEnd()
+        
+        # If all players finished, show level progression message
+        if all(game_finished):
+            glColor3f(1, 1, 1)
+            if current_level < 2:
+                progression_text = "Next Level in 3 seconds..."
+            else:
+                progression_text = "Game Complete! Restarting in 3 seconds..."
+            text_width = len(progression_text) * 9  # Approximate width
+            x_pos = width // 2 - text_width // 2
+            y_pos = height // 2
+            glRasterPos2f(x_pos, y_pos)
+            for char in progression_text:
+                glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(char))
+        
+        glPopMatrix()
+        glMatrixMode(GL_PROJECTION)
+        glPopMatrix()
+        glMatrixMode(GL_MODELVIEW)
+
+# --- GLUT CALLBACKS ---
+def display():
+    width = glutGet(GLUT_WINDOW_WIDTH)
+    height = glutGet(GLUT_WINDOW_HEIGHT)
+    
+    # Draw each player's view
+    draw_player_view(0, width, height)  # Player 1 (left side)
+    draw_player_view(1, width, height)  # Player 2 (right side)
+    
     glutSwapBuffers()
+
+def reshape(width, height):
+    # Reset the projection matrix for each viewport
+    glMatrixMode(GL_PROJECTION)
+    glLoadIdentity()
+    gluPerspective(45, (width/2)/height, 0.1, 200)  # Adjusted aspect ratio for split screen
+    glMatrixMode(GL_MODELVIEW)
 
 def idle():
     update_physics()
     glutPostRedisplay()
 
 def special_down(k, x, y):
-    if k == GLUT_KEY_UP:    keys['accel'] = True
-    elif k == GLUT_KEY_LEFT: keys['left'] = True
-    elif k == GLUT_KEY_RIGHT: keys['right'] = True
+    if k == GLUT_KEY_UP:    keys['p2_accel'] = True
+    elif k == GLUT_KEY_LEFT: keys['p2_left'] = True
+    elif k == GLUT_KEY_RIGHT: keys['p2_right'] = True
 
 def special_up(k, x, y):
-    if k == GLUT_KEY_UP:    keys['accel'] = False
-    elif k == GLUT_KEY_LEFT: keys['left'] = False
-    elif k == GLUT_KEY_RIGHT: keys['right'] = False
-
-def set_weather(new_weather):
-    global weather, handling, particles
-    weather = new_weather
-    if weather == 0:  # Sunny
-        handling = 0.06
-        particles = []
-    elif weather == 1:  # Rain
-        handling = 0.03
-        particles = [{'pos': [random.uniform(-10, 10), 20, random.uniform(-10, 10)],
-                      'vel': [0, random.uniform(-1.0, -0.5), 0]} for _ in range(150)]  # Slower rain, 150 particles
-    elif weather == 2:  # Snow
-        handling = 0.12
-        particles = [{'pos': [random.uniform(-10, 10), 20, random.uniform(-10, 10)],
-                      'vel': [random.uniform(-0.05, 0.05), random.uniform(-0.3, -0.1), random.uniform(-0.05, 0.05)]} for
-                     _ in range(300)]  # Slower snow, 300 particles
-
+    if k == GLUT_KEY_UP:    keys['p2_accel'] = False
+    elif k == GLUT_KEY_LEFT: keys['p2_left'] = False
+    elif k == GLUT_KEY_RIGHT: keys['p2_right'] = False
 
 def keyboard_down(k, x, y):
-    global camera_mode, game_finished, position, velocity, objects, weather
+    global camera_mode
+    
+    # Player 1 camera toggle
     if k == b'c' or k == b'C':
-        camera_mode = (camera_mode + 1) % 2
+        camera_mode[0] = (camera_mode[0] + 1) % 2
+    
+    # Player 2 camera toggle
+    elif k == b'v' or k == b'V':
+        camera_mode[1] = (camera_mode[1] + 1) % 2
+    
+    # Player 2 controls (WASD)
     elif k == b'w' or k == b'W':
-        set_weather((weather + 1) % 3)
-    elif (k == b'r' or k == b'R') and game_finished:
-        game_finished = False
-        position = [0.0, 0.0, 0.0]
-        velocity = 0.0
-        max_speed = top_speed
-        boost_end_time = 0
-        generate_objects()
+        keys['p1_accel'] = True
+    elif k == b'a' or k == b'A':
+        keys['p1_left'] = True
+    elif k == b'd' or k == b'D':
+        keys['p1_right'] = True
+
+def keyboard_up(k, x, y):
+    # Player 2 controls (WASD) release
+    if k == b'w' or k == b'W':
+        keys['p1_accel'] = False
+    elif k == b'a' or k == b'A':
+        keys['p1_left'] = False
+    elif k == b'd' or k == b'D':
+        keys['p1_right'] = False
 
 # --- INITIALIZATION ---
 def init():
@@ -393,22 +614,31 @@ def init():
     gluPerspective(45, 800/600, 0.1, 200)  # Extended far plane
     glMatrixMode(GL_MODELVIEW)
 
+def init_players():
+    global position
+    # Start positions: player 1 on left, player 2 on right
+    position[0][0] = -TRACK_WIDTH/4
+    position[1][0] = TRACK_WIDTH/4
+
 glutInit()
 glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH)
 glutInitWindowSize(1500,900)
-glutCreateWindow(b"3D Car Simulation with Textures & Lighting")
+glutCreateWindow(b"3D Car Simulation - Three Levels")
 
 init()
 generate_control_points()
 generate_track()
 generate_objects()
+init_players()
 
-# Set random weather at startup
-set_weather(random.randint(0, 2))
+# Start with sunny level
+set_level_properties(current_level)
 
 glutDisplayFunc(display)
+glutReshapeFunc(reshape)
 glutIdleFunc(idle)
 glutSpecialFunc(special_down)
 glutSpecialUpFunc(special_up)
 glutKeyboardFunc(keyboard_down)
+glutKeyboardUpFunc(keyboard_up)
 glutMainLoop()
