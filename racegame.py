@@ -557,14 +557,14 @@ def idle():
     glutPostRedisplay()
 
 def special_down(k, x, y):
-    if k == GLUT_KEY_UP:    keys['p1_accel'] = True
-    elif k == GLUT_KEY_LEFT: keys['p1_left'] = True
-    elif k == GLUT_KEY_RIGHT: keys['p1_right'] = True
+    if k == GLUT_KEY_UP:    keys['p2_accel'] = True
+    elif k == GLUT_KEY_LEFT: keys['p2_left'] = True
+    elif k == GLUT_KEY_RIGHT: keys['p2_right'] = True
 
 def special_up(k, x, y):
-    if k == GLUT_KEY_UP:    keys['p1_accel'] = False
-    elif k == GLUT_KEY_LEFT: keys['p1_left'] = False
-    elif k == GLUT_KEY_RIGHT: keys['p1_right'] = False
+    if k == GLUT_KEY_UP:    keys['p2_accel'] = False
+    elif k == GLUT_KEY_LEFT: keys['p2_left'] = False
+    elif k == GLUT_KEY_RIGHT: keys['p2_right'] = False
 
 def keyboard_down(k, x, y):
     global camera_mode
@@ -579,20 +579,20 @@ def keyboard_down(k, x, y):
     
     # Player 2 controls (WASD)
     elif k == b'w' or k == b'W':
-        keys['p2_accel'] = True
+        keys['p1_accel'] = True
     elif k == b'a' or k == b'A':
-        keys['p2_left'] = True
+        keys['p1_left'] = True
     elif k == b'd' or k == b'D':
-        keys['p2_right'] = True
+        keys['p1_right'] = True
 
 def keyboard_up(k, x, y):
     # Player 2 controls (WASD) release
     if k == b'w' or k == b'W':
-        keys['p2_accel'] = False
+        keys['p1_accel'] = False
     elif k == b'a' or k == b'A':
-        keys['p2_left'] = False
+        keys['p1_left'] = False
     elif k == b'd' or k == b'D':
-        keys['p2_right'] = False
+        keys['p1_right'] = False
 
 # --- INITIALIZATION ---
 def init():
