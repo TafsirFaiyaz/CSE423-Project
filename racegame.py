@@ -16,10 +16,10 @@ current_level = 0  # 0: sunny, 1: rain, 2: snow
 
 # Car state for two players
 position = [
-    [0.0, 0.0, 0.0],       # Player 1 (left side of track)
-    [0.0, 0.0, 0.0]        # Player 2 (right side of track)
+    [0.0, 0.0, 0.0],  # Player 1 (left side of track)
+    [0.0, 0.0, 0.0]  # Player 2 (right side of track)
 ]
-orientation = [0.0, 0.0]   # Fixed at 0 for straight movement
+orientation = [0.0, 0.0]  # Fixed at 0 for straight movement
 velocity = [0.0, 0.0]
 top_speed = 0.15
 acceleration = 0.005
@@ -36,15 +36,13 @@ keys = {
     'restart': False
 }
 
-# Texture handle
-track_tex = None
-
 # Camera state for both players
 camera_mode = [1, 1]  # 0 = first-person, 1 = third-person
 
 # Level progression state
 level_completed = False
 level_complete_time = 0
+
 
 # --- TRACK GENERATION ---
 def generate_control_points(n=2, length=150):
@@ -53,11 +51,15 @@ def generate_control_points(n=2, length=150):
     CONTROL_POINTS.append((0, 0))
     CONTROL_POINTS.append((0, length))
 
+
 def catmull_rom(p0, p1, p2, p3, t):
-    t2, t3 = t*t, t*t*t
+    t2, t3 = t * t, t * t * t
+
     def cr(a, b, c, d):
-        return 0.5 * (2*b + (c-a)*t + (2*a - 5*b + 4*c - d)*t2 + (-a + 3*b - 3*c + d)*t3)
+        return 0.5 * (2 * b + (c - a) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3)
+
     return cr(p0[0], p1[0], p2[0], p3[0]), cr(p0[1], p1[1], p2[1], p3[1])
+
 
 def generate_track():
     SPLINE_POINTS.clear()
@@ -69,6 +71,7 @@ def generate_track():
         y = 0.0
         SPLINE_POINTS.append((x, y, z))
 
+
 # --- OBJECT PLACEMENT ---
 def generate_objects():
     num_obs = int(len(SPLINE_POINTS) / 10)  # 1 obstacle every 10 segments
@@ -76,103 +79,87 @@ def generate_objects():
 
     objects.clear()
     N = len(SPLINE_POINTS)
-    picks = random.sample(range(10, N-10), num_obs + num_boost)
+    picks = random.sample(range(10, N - 10), num_obs + num_boost)
     kinds = ['obs'] * num_obs + ['boost'] * num_boost
     random.shuffle(kinds)
     for idx, kind in zip(picks, kinds):
         x, y, z = SPLINE_POINTS[idx]
-        x = random.uniform(-TRACK_WIDTH/2 + 0.25, TRACK_WIDTH/2 - 0.25)
+        x = random.uniform(-TRACK_WIDTH / 2 + 0.25, TRACK_WIDTH / 2 - 0.25)
         objects.append({'type': kind, 'pos': (x, y, z), 'active': True})
 
-# --- PROCEDURAL CHECKERBOARD TEXTURE ---
-def create_checkerboard_texture(size=64, check_size=8):
-    tex_data = (ctypes.c_ubyte * (size * size * 3))()
-    for y in range(size):
-        for x in range(size):
-            c = ((x // check_size) % 2) ^ ((y // check_size) % 2)
-            color = 255 if c else 50
-            idx = (y * size + x) * 3
-            tex_data[idx]   = color
-            tex_data[idx+1] = color
-            tex_data[idx+2] = color
-    tex_id = glGenTextures(1)
-    glBindTexture(GL_TEXTURE_2D, tex_id)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, size, size, 0, GL_RGB, GL_UNSIGNED_BYTE, tex_data)
-    return tex_id
 
 # --- DRAW ROUTINES ---
 def draw_track():
-    glEnable(GL_TEXTURE_2D)
-    glBindTexture(GL_TEXTURE_2D, track_tex)
-    glColor3f(1,1,1)
     glBegin(GL_QUADS)
-    repeat = len(SPLINE_POINTS) / 10.0
-    for i in range(len(SPLINE_POINTS)-1):
-        x1,y1,z1 = SPLINE_POINTS[i]
-        x2,y2,z2 = SPLINE_POINTS[i+1]
+    for i in range(len(SPLINE_POINTS) - 1):
+        x1, y1, z1 = SPLINE_POINTS[i]
+        x2, y2, z2 = SPLINE_POINTS[i + 1]
         nx, nz = -1, 0
-        w = TRACK_WIDTH/2
+        w = TRACK_WIDTH / 2
 
-        s1 = i / repeat
-        s2 = (i+1) / repeat
-        glTexCoord2f(s1, 0); glVertex3f(x1+nx*w, y1, z1+nz*w)
-        glTexCoord2f(s1, 1); glVertex3f(x1-nx*w, y1, z1-nz*w)
-        glTexCoord2f(s2, 1); glVertex3f(x2-nx*w, y2, z2-nz*w)
-        glTexCoord2f(s2, 0); glVertex3f(x2+nx*w, y2, z2+nz*w)
+        # Alternate colors to create checkered effect
+        if (i // 5) % 2 == 0:
+            glColor3f(0.8, 0.8, 0.8)  # Light gray
+        else:
+            glColor3f(0.5, 0.5, 0.5)  # Dark gray
+
+        glVertex3f(x1 + nx * w, y1, z1 + nz * w)
+        glVertex3f(x1 - nx * w, y1, z1 - nz * w)
+        glVertex3f(x2 - nx * w, y2, z2 - nz * w)
+        glVertex3f(x2 + nx * w, y2, z2 + nz * w)
     glEnd()
-    glDisable(GL_TEXTURE_2D)
+
 
 def draw_cube():
     glBegin(GL_QUADS)
-    glVertex3f(-1,-1,1); glVertex3f(1,-1,1)
-    glVertex3f(1,1,1);   glVertex3f(-1,1,1)
-    glVertex3f(-1,-1,-1);glVertex3f(1,-1,-1)
-    glVertex3f(1,1,-1);  glVertex3f(-1,1,-1)
-    glVertex3f(-1,1,-1); glVertex3f(1,1,-1)
-    glVertex3f(1,1,1);   glVertex3f(-1,1,1)
-    glVertex3f(-1,-1,-1);glVertex3f(1,-1,-1)
-    glVertex3f(1,-1,1);  glVertex3f(-1,-1,1)
-    glVertex3f(-1,-1,-1);glVertex3f(-1,-1,1)
-    glVertex3f(-1,1,1);  glVertex3f(-1,1,-1)
-    glVertex3f(1,-1,-1); glVertex3f(1,-1,1)
-    glVertex3f(1,1,1);   glVertex3f(1,1,-1)
+    vertices = [
+        (-1, -1, 1), (1, -1, 1), (1, 1, 1), (-1, 1, 1),
+        (-1, -1, -1), (1, -1, -1), (1, 1, -1), (-1, 1, -1)
+    ]
+    faces = [
+        (0, 1, 2, 3),  # front
+        (4, 5, 6, 7),  # back
+        (3, 2, 6, 7),  # top
+        (0, 1, 5, 4),  # bottom
+        (0, 3, 7, 4),  # left
+        (1, 2, 6, 5)  # right
+    ]
+    for face in faces:
+        for vertex in face:
+            glVertex3f(*vertices[vertex])
     glEnd()
+
 
 def draw_car(player_id):
     glPushMatrix()
     glTranslatef(*position[player_id])
-    glRotatef(-math.degrees(orientation[player_id]), 0,1,0)
+    glRotatef(-math.degrees(orientation[player_id]), 0, 1, 0)
     glScalef(0.2, 0.2, 0.2)
     glColor3f(*car_colors[player_id])
     draw_cube()
     glPopMatrix()
 
+
 def draw_objects():
     for obj in objects:
         if not obj['active']:
             continue
-        x,y,z = obj['pos']
+        x, y, z = obj['pos']
         glPushMatrix()
-        glTranslatef(x,y+0.125,z)
-        if obj['type']=='obs':
-            glColor3f(0.5,0.5,0.5)
-            glScalef(0.25,0.25,0.25)
+        glTranslatef(x, y + 0.125, z)
+        if obj['type'] == 'obs':
+            glColor3f(0.5, 0.5, 0.5)
+            glScalef(0.25, 0.25, 0.25)
             draw_cube()
         else:
-            glColor3f(1,1,0)
-            glutSolidSphere(0.25,16,16)
+            glColor3f(1, 1, 0)
+            glutSolidSphere(0.25, 16, 16)
         glPopMatrix()
 
+
 def draw_particles():
-    glEnable(GL_BLEND)
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-    glDisable(GL_LIGHTING)
     if current_level == 1:  # Rain
-        glColor4f(0.5, 0.5, 1.0, 0.7)  # Semi-transparent blue
+        glColor3f(0.5, 0.5, 1.0)  # Blue
         glBegin(GL_LINES)
         for p in particles:
             x, y, z = p['pos']
@@ -180,7 +167,7 @@ def draw_particles():
             glVertex3f(x, y - 1.0, z)
         glEnd()
     elif current_level == 2:  # Snow
-        glColor4f(1.0, 1.0, 1.0, 0.9)  # Semi-transparent white
+        glColor3f(1.0, 1.0, 1.0)  # White
         glPointSize(3.0)
         glBegin(GL_POINTS)
         for p in particles:
@@ -188,8 +175,7 @@ def draw_particles():
             glVertex3f(x, y, z)
         glEnd()
         glPointSize(1.0)
-    glEnable(GL_LIGHTING)
-    glDisable(GL_BLEND)
+
 
 def draw_sun():
     glPushMatrix()
@@ -197,6 +183,7 @@ def draw_sun():
     glColor3f(1.0, 1.0, 0.0)  # Yellow sun
     glutSolidSphere(4.0, 20, 20)  # Slightly smaller for distance
     glPopMatrix()
+
 
 def draw_text(x, y, text):
     glMatrixMode(GL_PROJECTION)
@@ -214,22 +201,24 @@ def draw_text(x, y, text):
     glPopMatrix()
     glMatrixMode(GL_MODELVIEW)
 
+
 # --- PHYSICS & COLLISION ---
 def aabb_collide(min1, max1, min2, max2):
     return all(min1[i] < max2[i] and max1[i] > min2[i] for i in range(3))
 
+
 def check_collisions(player_id):
     global velocity, max_speed, boost_end_time
-    cx,cy,cz = position[player_id]
-    car_min = (cx-0.1, cy-0.1, cz-0.1)
-    car_max = (cx+0.1, cy+0.1, cz+0.1)
+    cx, cy, cz = position[player_id]
+    car_min = (cx - 0.1, cy - 0.1, cz - 0.1)
+    car_max = (cx + 0.1, cy + 0.1, cz + 0.1)
     t = glutGet(GLUT_ELAPSED_TIME)
     for obj in objects:
         if not obj['active']:
             continue
-        x,y,z = obj['pos']
-        o_min = (x-0.125, y-0.125, z-0.125)
-        o_max = (x+0.125, y+0.125, z+0.125)
+        x, y, z = obj['pos']
+        o_min = (x - 0.125, y - 0.125, z - 0.125)
+        o_max = (x + 0.125, y + 0.125, z + 0.125)
         if aabb_collide(car_min, car_max, o_min, o_max):
             if obj['type'] == 'obs':
                 velocity[player_id] = 0.0
@@ -241,24 +230,25 @@ def check_collisions(player_id):
         max_speed[player_id] = top_speed
         boost_end_time[player_id] = 0
 
+
 def update_physics():
     global position, velocity, game_finished, level_completed, level_complete_time, current_level
-    
+
     # Check for car-to-car collisions
     check_car_collision()
-    
+
     # Update both players
     for player_id in range(2):
         if game_finished[player_id]:
             continue
 
         check_collisions(player_id)
-        
+
         # Apply key controls for respective player
         accel_key = 'p1_accel' if player_id == 0 else 'p2_accel'
         left_key = 'p1_left' if player_id == 0 else 'p2_left'
         right_key = 'p1_right' if player_id == 0 else 'p2_right'
-        
+
         if keys[accel_key]:
             velocity[player_id] += acceleration
         else:
@@ -271,7 +261,7 @@ def update_physics():
             position[player_id][0] -= handling  # Move left (negative x)
 
         # Constrain to track with slowdown on boundary hit
-        new_x = max(-TRACK_WIDTH/2 + 0.1, min(TRACK_WIDTH/2 - 0.1, position[player_id][0]))
+        new_x = max(-TRACK_WIDTH / 2 + 0.1, min(TRACK_WIDTH / 2 - 0.1, position[player_id][0]))
         if new_x != position[player_id][0]:  # Hit boundary
             velocity[player_id] *= 0.9  # Reduce velocity by 10%
         position[player_id][0] = new_x
@@ -292,7 +282,7 @@ def update_physics():
         if current_level < 2:  # Only advance if not on final level
             next_level()
         else:
-            # On final level, restart the game from level 0
+            # On final level, restart the game
             restart_game()
 
     # Update particles
@@ -300,36 +290,39 @@ def update_physics():
         p['pos'][0] += p['vel'][0]
         p['pos'][1] += p['vel'][1]
         p['pos'][2] += p['vel'][2]
-        
+
         # Get average z position of both cars for particle respawn
         avg_z = (position[0][2] + position[1][2]) / 2
-        
+
         if p['pos'][1] < -1:  # Fall below screen
             p['pos'] = [random.uniform(-5, 5), 20, random.uniform(max(0, avg_z - 20), min(150, avg_z + 20))]
             if current_level == 1:  # Rain
                 p['vel'] = [0, random.uniform(-2.5, -1.5), 0]  # Random speed
             elif current_level == 2:  # Snow
-                p['vel'] = [random.uniform(-0.02, 0.02), random.uniform(-0.7, -0.3), random.uniform(-0.02, 0.02)]  # Random speed
+                p['vel'] = [random.uniform(-0.02, 0.02), random.uniform(-0.7, -0.3),
+                            random.uniform(-0.02, 0.02)]  # Random speed
+
 
 def check_car_collision():
     # Simple collision detection between two cars
     p1_x, p1_y, p1_z = position[0]
     p2_x, p2_y, p2_z = position[1]
-    
+
     # Distance check (rough collision)
     dx = p1_x - p2_x
     dz = p1_z - p2_z
-    dist_squared = dx*dx + dz*dz
-    
-    if dist_squared < 0.04:  # Cars are too close (colliding)
+    dist_squared = dx * dx + dz * dz
+
+    if dist_squared < 0.04:  # Cars are too close
         # Slow down both cars
         velocity[0] *= 0.5
         velocity[1] *= 0.5
-        
+
         # Push cars apart slightly
         push_dir = 0.05 if dx < 0 else -0.05
         position[0][0] += push_dir
         position[1][0] -= push_dir
+
 
 # --- LEVEL MANAGEMENT ---
 def set_level_properties(level):
@@ -343,16 +336,14 @@ def set_level_properties(level):
                       'vel': [0, random.uniform(-1.0, -0.5), 0]} for _ in range(150)]  # Slower rain, 150 particles
     elif level == 2:  # Snow
         handling = 0.12
-        particles = [{'pos': [random.uniform(-10, 10), 20, random.uniform(-10, 10)],
-                      'vel': [random.uniform(-0.05, 0.05), random.uniform(-0.3, -0.1), random.uniform(-0.05, 0.05)]} for
-                     _ in range(300)]  # Slower snow, 300 particles
+
 
 def next_level():
     global current_level, game_finished, position, velocity, max_speed, boost_end_time, level_completed
-    
+
     # Advance to next level
     current_level += 1
-    
+
     # Reset race state
     game_finished = [False, False]
     position = [
@@ -363,20 +354,22 @@ def next_level():
     max_speed = [top_speed, top_speed]
     boost_end_time = [0, 0]
     level_completed = False
-    
+
     # Set up new level properties
     set_level_properties(current_level)
-    
+
     # Generate new objects
     generate_objects()
-    
+
     # Set starting positions
     init_players()
+
 
 def restart_game():
     global current_level
     current_level = -1  # Reset to first level (0)
     next_level()
+
 
 # --- SPLIT SCREEN RENDERING ---
 def setup_viewport(player_id, width, height):
@@ -385,9 +378,10 @@ def setup_viewport(player_id, width, height):
     else:  # Right half for player 2
         glViewport(width // 2, 0, width // 2, height)
 
+
 def draw_player_view(player_id, width, height):
     setup_viewport(player_id, width, height)
-    
+
     # Set background color based on current level
     if current_level == 0:  # Sunny
         glClearColor(0.5, 0.7, 1.0, 1.0)  # Light blue sky
@@ -401,7 +395,7 @@ def draw_player_view(player_id, width, height):
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
     else:  # Second player - only clear depth buffer to preserve first player's rendering
         glClear(GL_DEPTH_BUFFER_BIT)
-    
+
     glLoadIdentity()
 
     px, py, pz = position[player_id]
@@ -438,7 +432,7 @@ def draw_player_view(player_id, width, height):
     draw_track()
     draw_particles()
     draw_objects()
-    
+
     # Draw both cars
     draw_car(0)
     draw_car(1)
@@ -449,7 +443,7 @@ def draw_player_view(player_id, width, height):
     # Draw player-specific UI elements
     viewport_width = width // 2
     viewport_height = height
-    
+
     # Setup for 2D overlay
     glMatrixMode(GL_PROJECTION)
     glPushMatrix()
@@ -458,29 +452,29 @@ def draw_player_view(player_id, width, height):
     glMatrixMode(GL_MODELVIEW)
     glPushMatrix()
     glLoadIdentity()
-    
+
     # Draw player label
     glColor3f(*car_colors[player_id])
-    player_text = f"Player {player_id+1}"
+    player_text = f"Player {player_id + 1}"
     x_pos = 10
     y_pos = viewport_height - 20
     glRasterPos2f(x_pos, y_pos)
     for char in player_text:
         glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(char))
-    
+
     # Draw speed indicator
     speed_text = f"Speed: {int(velocity[player_id] * 1000)}"
     glRasterPos2f(x_pos, y_pos - 20)
     for char in speed_text:
         glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(char))
-    
+
     # Draw level indicator
     level_names = ["Sunny", "Rainy", "Snowy"]
     level_text = f"Level: {current_level + 1} ({level_names[current_level]})"
     glRasterPos2f(x_pos, y_pos - 40)
     for char in level_text:
         glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(char))
-    
+
     # Draw finish message if player has finished
     if game_finished[player_id]:
         finish_text = "FINISHED!"
@@ -490,7 +484,7 @@ def draw_player_view(player_id, width, height):
         glRasterPos2f(x_pos, y_pos)
         for char in finish_text:
             glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(char))
-    
+
     # Reset projection
     glPopMatrix()
     glMatrixMode(GL_PROJECTION)
@@ -507,14 +501,14 @@ def draw_player_view(player_id, width, height):
         glMatrixMode(GL_MODELVIEW)
         glPushMatrix()
         glLoadIdentity()
-        
+
         # Draw vertical divider
         glColor3f(1, 1, 1)  # White divider
         glBegin(GL_LINES)
         glVertex2f(width // 2, 0)
         glVertex2f(width // 2, height)
         glEnd()
-        
+
         # If all players finished, show level progression message
         if all(game_finished):
             glColor3f(1, 1, 1)
@@ -528,55 +522,67 @@ def draw_player_view(player_id, width, height):
             glRasterPos2f(x_pos, y_pos)
             for char in progression_text:
                 glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(char))
-        
+
         glPopMatrix()
         glMatrixMode(GL_PROJECTION)
         glPopMatrix()
         glMatrixMode(GL_MODELVIEW)
 
+
 # --- GLUT CALLBACKS ---
 def display():
     width = glutGet(GLUT_WINDOW_WIDTH)
     height = glutGet(GLUT_WINDOW_HEIGHT)
-    
+
     # Draw each player's view
     draw_player_view(0, width, height)  # Player 1 (left side)
     draw_player_view(1, width, height)  # Player 2 (right side)
-    
+
     glutSwapBuffers()
+
 
 def reshape(width, height):
     # Reset the projection matrix for each viewport
     glMatrixMode(GL_PROJECTION)
     glLoadIdentity()
-    gluPerspective(45, (width/2)/height, 0.1, 200)  # Adjusted aspect ratio for split screen
+    gluPerspective(45, (width / 2) / height, 0.1, 200)  # Adjusted aspect ratio for split screen
     glMatrixMode(GL_MODELVIEW)
+
 
 def idle():
     update_physics()
     glutPostRedisplay()
 
+
 def special_down(k, x, y):
-    if k == GLUT_KEY_UP:    keys['p2_accel'] = True
-    elif k == GLUT_KEY_LEFT: keys['p2_left'] = True
-    elif k == GLUT_KEY_RIGHT: keys['p2_right'] = True
+    if k == GLUT_KEY_UP:
+        keys['p2_accel'] = True
+    elif k == GLUT_KEY_LEFT:
+        keys['p2_left'] = True
+    elif k == GLUT_KEY_RIGHT:
+        keys['p2_right'] = True
+
 
 def special_up(k, x, y):
-    if k == GLUT_KEY_UP:    keys['p2_accel'] = False
-    elif k == GLUT_KEY_LEFT: keys['p2_left'] = False
-    elif k == GLUT_KEY_RIGHT: keys['p2_right'] = False
+    if k == GLUT_KEY_UP:
+        keys['p2_accel'] = False
+    elif k == GLUT_KEY_LEFT:
+        keys['p2_left'] = False
+    elif k == GLUT_KEY_RIGHT:
+        keys['p2_right'] = False
+
 
 def keyboard_down(k, x, y):
     global camera_mode
-    
+
     # Player 1 camera toggle
     if k == b'c' or k == b'C':
         camera_mode[0] = (camera_mode[0] + 1) % 2
-    
+
     # Player 2 camera toggle
     elif k == b'v' or k == b'V':
         camera_mode[1] = (camera_mode[1] + 1) % 2
-    
+
     # Player 2 controls (WASD)
     elif k == b'w' or k == b'W':
         keys['p1_accel'] = True
@@ -584,6 +590,7 @@ def keyboard_down(k, x, y):
         keys['p1_left'] = True
     elif k == b'd' or k == b'D':
         keys['p1_right'] = True
+
 
 def keyboard_up(k, x, y):
     # Player 2 controls (WASD) release
@@ -594,35 +601,25 @@ def keyboard_up(k, x, y):
     elif k == b'd' or k == b'D':
         keys['p1_right'] = False
 
+
 # --- INITIALIZATION ---
 def init():
-    global track_tex
     glEnable(GL_DEPTH_TEST)
-    glEnable(GL_BLEND)
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-
-    glEnable(GL_LIGHTING)
-    glEnable(GL_LIGHT0)
-    glLightfv(GL_LIGHT0, GL_POSITION, [0,10,0,0])
-    glLightfv(GL_LIGHT0, GL_DIFFUSE, [1,1,1,1])
-    glEnable(GL_COLOR_MATERIAL)
-    glColorMaterial(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE)
-
-    track_tex = create_checkerboard_texture()
-
     glMatrixMode(GL_PROJECTION)
-    gluPerspective(45, 800/600, 0.1, 200)  # Extended far plane
+    gluPerspective(45, 800 / 600, 0.1, 200)  # Extended far plane
     glMatrixMode(GL_MODELVIEW)
+
 
 def init_players():
     global position
     # Start positions: player 1 on left, player 2 on right
-    position[0][0] = -TRACK_WIDTH/4
-    position[1][0] = TRACK_WIDTH/4
+    position[0][0] = -TRACK_WIDTH / 4
+    position[1][0] = TRACK_WIDTH / 4
+
 
 glutInit()
 glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH)
-glutInitWindowSize(1500,900)
+glutInitWindowSize(1500, 900)
 glutCreateWindow(b"3D Car Simulation - Three Levels")
 
 init()
