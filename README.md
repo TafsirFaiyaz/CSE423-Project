@@ -4,10 +4,14 @@ To run this game you need to have python installed in your computer and make sur
 
 In python console simply write below commands and opengl will be installed.
 
-pip install PyOpenGL PyOpenGL_accelerate
-pip install freeglut
+1. pip install PyOpenGL PyOpenGL_accelerate
+
+2. pip install freeglut
+
+   
 
 after that clone the racegame.py to your project directory and run the python program and thats it.
+
 
 In the game the controls are below:
 
@@ -18,6 +22,7 @@ Arrow up-down-left-right = for basic movements of player 2
 C = Player 1 camera change
 
 V = Player 2 camera change
+
 
 Be sure to experience MULTIPLE LEVELS!!!!!!
 
